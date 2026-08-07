@@ -38,3 +38,4 @@ jobs:
           image: buildquick-copilots:${{ github.sha }}
           fail-build: true
           severity-cutoff: high
+          output-format: table
