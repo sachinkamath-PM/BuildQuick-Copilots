@@ -1,6 +1,6 @@
 [project]
 name = "buildquick-copilots"
-version = "0.10.0"
+version = "0.10.1"
 description = "Shared contextual chat foundation for Tyche, Plutus, and Nous"
 requires-python = ">=3.11"
 dependencies = [
