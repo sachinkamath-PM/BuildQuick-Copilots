@@ -82,8 +82,8 @@ def test_public_demo_configuration_requires_isolated_guest_auth_and_explicit_hos
     safe = replace(
         unsafe,
         auth_mode="guest",
-        app_secret="a-long-random-deployment-secret",
-        allowed_hosts=("buildquick.co.in", "www.buildquick.co.in"),
+        app_secret="a-long-random-deployment-secret-with-32-bytes",
+        allowed_hosts=("copilots.buildquick.co.in",),
     )
     safe.validate()
     assert safe.browser_auth_mode() == "guest"

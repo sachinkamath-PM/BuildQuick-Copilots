@@ -16,10 +16,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
           cache: pip
       - name: Install
-        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+        run: python -m pip install --upgrade pip && python -m pip install --require-hashes -r requirements.lock && python -m pip install 'pytest>=9,<10'
       - name: Compile
         run: python -m compileall -q app
       - name: Test
@@ -31,4 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build production image
-        run: docker build --tag parallel-copilots:${{ github.sha }} .
+        run: docker build --tag buildquick-copilots:${{ github.sha }} .
+      - name: Scan production image
+        uses: anchore/scan-action@v7
+        with:
+          image: buildquick-copilots:${{ github.sha }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: table

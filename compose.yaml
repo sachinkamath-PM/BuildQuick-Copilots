@@ -1,4 +1,10 @@
-name: parallel-copilots
+name: buildquick-copilots
+
+x-service-logging: &service-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
 
 services:
   database:
@@ -15,8 +21,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *service-logging
 
   app:
+    image: ghcr.io/sachinkamath-pm/buildquick-copilots:${IMAGE_TAG:-local}
     build:
       context: .
     restart: unless-stopped
@@ -27,13 +35,16 @@ services:
       APP_ENV: demo
       AUTH_MODE: guest
       APP_SECRET: ${APP_SECRET:?Set APP_SECRET in .env.deploy}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,buildquick.co.in,www.buildquick.co.in}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,copilots.buildquick.co.in}
       DATABASE_URL: postgresql://${POSTGRES_USER:-copilots}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-copilots}
       ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-mock}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-terra}
       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-low}
       REQUEST_LIMIT_PER_MINUTE: ${REQUEST_LIMIT_PER_MINUTE:-120}
+      MIGRATE_ON_STARTUP: ${MIGRATE_ON_STARTUP:-true}
+      GUEST_RETENTION_HOURS: ${GUEST_RETENTION_HOURS:-24}
+      GUEST_CLEANUP_INTERVAL_SECONDS: ${GUEST_CLEANUP_INTERVAL_SECONDS:-3600}
       FEATURE_TYCHE: ${FEATURE_TYCHE:-true}
       FEATURE_PLUTUS: ${FEATURE_PLUTUS:-true}
       FEATURE_NOUS: ${FEATURE_NOUS:-true}
@@ -46,6 +57,10 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 1.0
+    logging: *service-logging
 
 volumes:
   postgres-data:

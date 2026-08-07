@@ -3,6 +3,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services.auth import Identity, issue_token
 from app.services.store import SQLiteStore
+from datetime import datetime, timedelta, timezone
+import pytest
 
 
 client = TestClient(app)
@@ -39,6 +41,12 @@ def test_health() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_readiness_checks_the_store() -> None:
+    response = client.get("/api/ready")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
 
 
 def test_streamed_message_includes_evidence_and_proposal() -> None:
@@ -155,3 +163,32 @@ def test_sqlite_store_survives_reopen(tmp_path) -> None:
     reopened_store.close()
     assert restored is not None
     assert restored.title == "Persistent conversation"
+
+
+def test_expired_guest_cleanup_deletes_owned_data(tmp_path) -> None:
+    database = tmp_path / "retention.db"
+    retention_store = SQLiteStore(database)
+    from app.domain.models import Conversation, Product
+
+    expired = Conversation(product=Product.TYCHE, workspace_id="guest-expired", owner_user_id="guest-expired")
+    active = Conversation(product=Product.TYCHE, workspace_id="guest-active", owner_user_id="guest-active")
+    retention_store.save_conversation(expired)
+    retention_store.save_conversation(active)
+    now = datetime.now(timezone.utc)
+    retention_store.register_guest_workspace("guest-expired", now - timedelta(minutes=1))
+    retention_store.register_guest_workspace("guest-active", now + timedelta(hours=1))
+
+    assert retention_store.delete_expired_guest_workspaces(now) == 1
+    assert retention_store.get_conversation(expired.id) is None
+    assert retention_store.get_conversation(active.id) is not None
+    retention_store.close()
+
+
+def test_readiness_requires_current_schema(tmp_path) -> None:
+    database = tmp_path / "unmigrated.db"
+    unmigrated = SQLiteStore(database, migrate_on_startup=False)
+    with pytest.raises(Exception):
+        unmigrated.ping()
+    unmigrated.migrate()
+    unmigrated.ping()
+    unmigrated.close()

@@ -323,7 +323,7 @@ async function ensureConversation() {
 
 async function ensureAccessToken() {
   if (state.accessToken) return state.accessToken;
-  const storageKey = "parallel-copilots-access-token";
+  const storageKey = "buildquick-copilots-access-token";
   if (state.browserAuthMode === "guest") {
     const stored = window.sessionStorage.getItem(storageKey);
     if (stored) {

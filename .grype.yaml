@@ -1,0 +1,24 @@
+show-suppressed: true
+
+# Python 3.13.14 has no stable release containing these fixes. Grype currently
+# points to Python 3.15 pre-release/future versions. Keep each exception pinned
+# to this exact interpreter package and review no later than 2026-10-31.
+ignore:
+  - vulnerability: CVE-2026-11940
+    package:
+      name: python
+      version: 3.13.14
+      type: binary
+    reason: No stable Python fix is available; review by 2026-10-31.
+  - vulnerability: CVE-2026-15308
+    package:
+      name: python
+      version: 3.13.14
+      type: binary
+    reason: No stable Python fix is available; review by 2026-10-31.
+  - vulnerability: CVE-2026-11972
+    package:
+      name: python
+      version: 3.13.14
+      type: binary
+    reason: No stable Python fix is available; review by 2026-10-31.

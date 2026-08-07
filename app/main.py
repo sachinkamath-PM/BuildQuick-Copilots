@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
@@ -48,7 +49,33 @@ from app.services.source_ingestion import MAX_SOURCE_BYTES, SourceUpload, parse_
 from app.services.settings import settings
 from app.services.tyche import TycheService
 
-app = FastAPI(title="Parallel Copilots", version="0.9.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    cleanup_task = None
+    if settings.auth_mode == "guest":
+        async def cleanup_expired_guests() -> None:
+            while True:
+                try:
+                    deleted = store.delete_expired_guest_workspaces()
+                    if deleted:
+                        logger.info("expired_guest_workspaces_deleted", extra={"count": deleted})
+                except Exception:
+                    logger.exception("guest_workspace_cleanup_failed")
+                await asyncio.sleep(settings.guest_cleanup_interval_seconds)
+
+        cleanup_task = asyncio.create_task(cleanup_expired_guests())
+    try:
+        yield
+    finally:
+        if cleanup_task:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+
+app = FastAPI(title="BuildQuick Copilots", version="0.10.0", lifespan=lifespan)
 app.add_middleware(
     RuntimeMiddleware,
     request_limit_per_minute=settings.request_limit_per_minute,
@@ -60,7 +87,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 tyche_service = TycheService(store)
 plutus_service = PlutusService(store)
 nous_service = NousService(store)
-logger = logging.getLogger("parallel_copilots")
+logger = logging.getLogger("buildquick_copilots")
 
 
 def ensure_feature(product: Product) -> None:
@@ -82,6 +109,15 @@ async def health() -> dict[str, str]:
         "auth_mode": os.getenv("AUTH_MODE", "local"),
         "version": app.version,
     }
+
+
+@app.get("/api/ready")
+async def ready() -> dict[str, str]:
+    try:
+        store.ping()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database is not ready") from None
+    return {"status": "ready", "store": store.__class__.__name__}
 
 
 @app.get("/api/config")
@@ -107,8 +143,10 @@ async def create_guest_token() -> dict[str, str]:
         raise HTTPException(status_code=404, detail="Not found")
     guest_id = f"guest-{uuid4()}"
     identity = Identity(user_id=guest_id, workspace_id=guest_id)
+    ttl_seconds = settings.guest_retention_hours * 60 * 60
+    store.register_guest_workspace(identity.workspace_id, datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds))
     return {
-        "access_token": issue_token(identity, ttl_seconds=24 * 60 * 60),
+        "access_token": issue_token(identity, ttl_seconds=ttl_seconds),
         "token_type": "bearer",
     }
 
