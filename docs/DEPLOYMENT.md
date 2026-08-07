@@ -68,6 +68,10 @@ Set `MIGRATE_ON_STARTUP=false` for a real authenticated deployment. Apply migrat
 
 Set `ASSISTANT_PROVIDER=openai` only when `OPENAI_API_KEY` is supplied through the host's secret manager. The deterministic mock provider requires no external AI API.
 
+## Container security gate
+
+Pull requests fail when the production image contains an unexcepted high- or critical-severity vulnerability. The narrowly scoped exceptions in `.grype.yaml` apply only to Python 3.13.14 advisories without a stable fixed runtime. They remain visible in CI and must be reviewed by 31 October 2026, or earlier when a stable Python fix is released.
+
 ## Updating and rollback
 
 Before an update, create an encrypted-at-rest host backup and verify that the output is non-empty:
