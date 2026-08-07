@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f1ea" />
+    <title>Parallel copilots</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#">Northstar</a>
+        <nav class="products" aria-label="Products">
+          <button class="product-tab active" data-product="tyche">Tyche</button>
+          <button class="product-tab" data-product="plutus">Plutus</button>
+          <button class="product-tab" data-product="nous">Nous</button>
+        </nav>
+        <button id="assistant-toggle" class="assistant-toggle" aria-expanded="true" aria-controls="assistant-panel">
+          Ask Tyche
+        </button>
+      </header>
+
+      <main class="workspace">
+        <section class="canvas" aria-label="Product workspace">
+          <div class="eyebrow" id="workspace-eyebrow">TYCHE · RÉSUMÉ</div>
+          <div class="document-header">
+            <div>
+              <h1 id="workspace-title">Product résumé</h1>
+              <p id="workspace-subtitle">Senior Product Manager · Updated today</p>
+            </div>
+            <button class="quiet-button">Share</button>
+          </div>
+
+          <div id="tyche-workspace" class="product-workspace active">
+            <div class="tyche-grid">
+              <div>
+                <article id="ats-card" class="ats-card">
+                  <div class="ats-score-wrap">
+                    <div id="ats-score" class="ats-score">—</div>
+                    <div><span class="document-meta">ATS MATCH</span><strong id="ats-label">Add a target role</strong></div>
+                  </div>
+                  <button id="job-toggle" class="quiet-button">Add job description</button>
+                  <div id="ats-diagnostics" class="ats-diagnostics"></div>
+                </article>
+
+                <form id="job-form" class="job-form hidden">
+                  <div class="job-form-header">
+                    <div><span class="document-meta">TARGET ROLE</span><h2>Compare against a job</h2></div>
+                    <button id="job-close" class="icon-button" type="button" aria-label="Close job description">×</button>
+                  </div>
+                  <div class="job-fields">
+                    <label>Role title<input id="job-title" required value="Senior Product Manager" /></label>
+                    <label>Company<input id="job-company" required value="Acme" /></label>
+                  </div>
+                  <div class="import-row">
+                    <label class="file-button" for="job-file">Import DOCX, PDF or TXT</label>
+                    <input id="job-file" class="sr-only" type="file" accept=".docx,.pdf,.txt" />
+                    <small>Imported text is analysed with the role and company above.</small>
+                  </div>
+                  <label>Job description<textarea id="job-description" required minlength="30" rows="8" placeholder="Paste the complete job description"></textarea></label>
+                  <div class="job-actions"><span id="job-status" role="status"></span><button type="submit">Analyse role</button></div>
+                </form>
+
+                <div class="document-toolbar">
+                  <div><strong id="resume-source">Demo résumé</strong><small>DOCX, PDF and TXT · 8 MB maximum</small></div>
+                  <div class="document-toolbar-actions">
+                    <label class="quiet-button file-button" for="resume-file">Import résumé</label>
+                    <input id="resume-file" class="sr-only" type="file" accept=".docx,.pdf,.txt" />
+                    <button id="resume-export" class="quiet-button" type="button">Export DOCX</button>
+                  </div>
+                  <span id="resume-file-status" role="status"></span>
+                </div>
+                <article class="document-card">
+                  <div id="resume-section-label" class="document-meta">EXPERIENCE</div>
+                  <h2 id="resume-company">Northstar Labs</h2>
+                  <p id="resume-role" class="role-line">Product Manager · 2022–Present</p>
+                  <div id="resume-bullets"></div>
+                </article>
+              </div>
+
+              <aside class="evidence-card" aria-label="Evidence inventory">
+                <span class="document-meta">TRACEABILITY</span>
+                <h2>Evidence inventory</h2>
+                <p>Tyche may only use claims and requirements shown here.</p>
+                <div id="evidence-list"></div>
+              </aside>
+            </div>
+          </div>
+
+          <div id="plutus-workspace" class="product-workspace">
+            <div class="metric-grid">
+              <article id="plutus-analysis" class="metric-card"><span>Net worth</span><strong id="net-worth">—</strong><small id="net-worth-change">Loading records</small></article>
+              <article class="metric-card"><span>Selected-period spending</span><strong id="period-spending">—</strong><small id="spending-change">Loading records</small></article>
+            </div>
+            <div class="plutus-actions">
+              <button id="scenario-toggle" class="assistant-toggle">Plan a goal</button>
+              <button id="financial-import-toggle" class="quiet-button">Import records</button>
+              <span id="plutus-period">Apr–Jun 2026 compared with Jan–Mar 2026</span>
+            </div>
+            <form id="financial-import-form" class="job-form hidden">
+              <div class="job-form-header">
+                <div><span class="document-meta">LOCAL CSV ONBOARDING</span><h2>Replace financial records</h2></div>
+                <button id="financial-import-close" class="icon-button" type="button" aria-label="Close financial import">×</button>
+              </div>
+              <p class="form-explainer">Files are validated together before anything changes. Importing replaces the corresponding account or transaction records; policies and goals remain unchanged.</p>
+              <div class="job-fields">
+                <label>Accounts CSV<input id="accounts-file" type="file" accept=".csv,text/csv" /></label>
+                <label>Transactions CSV<input id="transactions-file" type="file" accept=".csv,text/csv" /></label>
+              </div>
+              <div class="template-actions">
+                <button type="button" class="source" data-template="accounts">Download accounts template</button>
+                <button type="button" class="source" data-template="transactions">Download transactions template</button>
+              </div>
+              <div class="job-actions"><span id="financial-import-status" role="status"></span><button type="submit">Validate and replace records</button></div>
+            </form>
+            <form id="scenario-form" class="job-form hidden">
+              <div class="job-form-header">
+                <div><span class="document-meta">DETERMINISTIC SCENARIO</span><h2>Plan a financial goal</h2></div>
+                <button id="scenario-close" class="icon-button" type="button" aria-label="Close scenario">×</button>
+              </div>
+              <div class="job-fields">
+                <label>Goal name<input id="goal-name" required value="Education fund" /></label>
+                <label>Target date<input id="goal-date" type="date" required value="2031-08-01" /></label>
+                <label>Target amount today (₹)<input id="goal-target" type="number" min="1" required value="5000000" /></label>
+                <label>Current savings (₹)<input id="goal-current" type="number" min="0" required value="500000" /></label>
+                <label>Annual return assumption<input id="goal-return" type="number" step="0.01" min="-0.2" max="0.3" required value="0.08" /></label>
+                <label>Annual inflation assumption<input id="goal-inflation" type="number" step="0.01" min="0" max="0.2" required value="0.05" /></label>
+              </div>
+              <div class="job-actions"><span id="scenario-status" role="status"></span><button type="submit">Calculate scenario</button></div>
+              <div id="scenario-result"></div>
+            </form>
+            <div class="insight-grid">
+              <article class="insight-card"><span class="document-meta">CATEGORY MOVEMENT</span><div id="category-changes"></div></article>
+              <article class="insight-card"><span class="document-meta">LIKELY SUBSCRIPTIONS</span><div id="subscriptions"></div></article>
+              <article class="insight-card"><span class="document-meta">UNUSUAL TRANSACTIONS</span><div id="anomalies"></div></article>
+              <article class="insight-card"><span class="document-meta">COVERAGE & NOMINEES</span><div id="coverage-gaps"></div></article>
+            </div>
+            <article class="accounts-card">
+              <div class="records-heading"><span class="document-meta">RECORDED ACCOUNTS</span><small id="plutus-data-source">Demo records</small></div>
+              <div id="account-list"></div>
+            </article>
+          </div>
+
+          <div id="nous-workspace" class="product-workspace">
+            <div class="nous-grid">
+              <section>
+                <article class="nous-intro">
+                  <span class="document-meta">COMMAND CENTRE</span>
+                  <h2>Ask Nous for an outcome</h2>
+                  <p>Try: “Analyse the last quarter’s customer feedback and recommend the three highest-priority opportunities.”</p>
+                </article>
+                <div id="nous-plans"></div>
+              </section>
+              <aside class="evidence-card">
+                <span class="document-meta">AVAILABLE AGENTS</span>
+                <div id="nous-agents"></div>
+                <div class="source-heading-row"><span class="document-meta nous-source-heading">PLAN SOURCES</span><button id="nous-source-toggle" class="source" type="button">Import</button></div>
+                <form id="nous-source-form" class="source-import-form hidden">
+                  <label for="nous-source-files">TXT, CSV or JSON · up to 5 files</label>
+                  <input id="nous-source-files" type="file" multiple accept=".txt,.csv,.json,text/plain,text/csv,application/json" required />
+                  <button type="submit">Validate and add sources</button>
+                  <small id="nous-source-status" role="status"></small>
+                </form>
+                <p class="source-help">Select the exact sources Nous may use for the next plan.</p>
+                <div id="nous-sources"></div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <aside id="assistant-panel" class="assistant-panel" aria-label="Product assistant">
+          <header class="panel-header">
+            <div>
+              <div class="eyebrow">PRODUCT ASSISTANT</div>
+              <h2 id="assistant-name">Ask Tyche</h2>
+            </div>
+            <div class="panel-controls">
+              <button id="reset-conversation" class="icon-button" aria-label="Delete and start a new conversation">↻</button>
+              <button id="close-panel" class="icon-button" aria-label="Close assistant">×</button>
+            </div>
+          </header>
+
+          <div id="context-strip" class="context-strip" aria-label="Assistant context"></div>
+          <div id="conversation" class="conversation" aria-live="polite"></div>
+
+          <form id="composer" class="composer">
+            <label class="sr-only" for="message-input">Message</label>
+            <textarea id="message-input" rows="2" placeholder="Ask Tyche about this selection"></textarea>
+            <div class="composer-footer">
+              <span>Context is shared for this message</span>
+              <button id="send-button" type="submit">Send</button>
+            </div>
+          </form>
+        </aside>
+      </main>
+    </div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
