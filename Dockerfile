@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS runtime
+FROM python:3.13-alpine@sha256:399babc8b49529dabfd9c922f2b5eea81d611e4512e3ed250d75bd2e7683f4b0 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,13 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+RUN addgroup --system app && adduser --system --ingroup app --home /app app
 
-COPY pyproject.toml requirements.lock README.md ./
+COPY requirements.lock ./
 COPY app ./app
 
 RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock \
-    && python -m pip install --no-cache-dir --no-deps . \
     && mkdir -p /app/work \
     && chown -R app:app /app
 
