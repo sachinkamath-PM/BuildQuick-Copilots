@@ -75,7 +75,7 @@ async def lifespan(_: FastAPI):
                 pass
 
 
-app = FastAPI(title="BuildQuick Copilots", version="0.10.0", lifespan=lifespan)
+app = FastAPI(title="BuildQuick Copilots", version="0.10.1", lifespan=lifespan)
 app.add_middleware(
     RuntimeMiddleware,
     request_limit_per_minute=settings.request_limit_per_minute,
