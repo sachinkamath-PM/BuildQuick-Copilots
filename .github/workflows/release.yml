@@ -38,8 +38,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-      - uses: actions/attest-build-provenance@v3
+      - name: Attest public release image
+        if: github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+      - name: Record private repository attestation limitation
+        if: github.event.repository.visibility != 'public'
+        run: echo "GitHub provenance attestations are unavailable for user-owned private repositories; the image was still published by digest." >> "$GITHUB_STEP_SUMMARY"
