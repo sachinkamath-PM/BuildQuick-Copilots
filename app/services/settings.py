@@ -27,6 +27,9 @@ class Settings:
     feature_tyche: bool
     feature_plutus: bool
     feature_nous: bool
+    migrate_on_startup: bool
+    guest_retention_hours: int
+    guest_cleanup_interval_seconds: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -47,6 +50,9 @@ class Settings:
             feature_tyche=_bool("FEATURE_TYCHE", True),
             feature_plutus=_bool("FEATURE_PLUTUS", True),
             feature_nous=_bool("FEATURE_NOUS", True),
+            migrate_on_startup=_bool("MIGRATE_ON_STARTUP", True),
+            guest_retention_hours=int(os.getenv("GUEST_RETENTION_HOURS", "24")),
+            guest_cleanup_interval_seconds=int(os.getenv("GUEST_CLEANUP_INTERVAL_SECONDS", "3600")),
         )
 
     def validate(self) -> None:
@@ -54,12 +60,16 @@ class Settings:
             raise RuntimeError("REQUEST_LIMIT_PER_MINUTE must be positive")
         if not self.allowed_hosts:
             raise RuntimeError("ALLOWED_HOSTS must contain at least one host")
+        if self.guest_retention_hours < 1:
+            raise RuntimeError("GUEST_RETENTION_HOURS must be positive")
+        if self.guest_cleanup_interval_seconds < 60:
+            raise RuntimeError("GUEST_CLEANUP_INTERVAL_SECONDS must be at least 60")
         if self.app_env == "demo":
             errors: list[str] = []
             if self.auth_mode != "guest":
                 errors.append("demo AUTH_MODE must be guest")
-            if self.app_secret == "local-development-secret-change-me":
-                errors.append("demo APP_SECRET must not use the development default")
+            if self.app_secret == "local-development-secret-change-me" or len(self.app_secret.encode()) < 32:
+                errors.append("demo APP_SECRET must contain at least 32 bytes")
             if self.allowed_hosts == ("*",):
                 errors.append("demo ALLOWED_HOSTS must be explicit")
             if errors:
@@ -76,8 +86,8 @@ class Settings:
             errors.append("production identity introspection must use HTTPS")
         if self.assistant_provider == "openai" and not self.openai_api_key:
             errors.append("OPENAI_API_KEY is required for the OpenAI provider")
-        if self.auth_mode == "local" and self.app_secret == "local-development-secret-change-me":
-            errors.append("production APP_SECRET must not use the development default")
+        if self.app_secret == "local-development-secret-change-me" or len(self.app_secret.encode()) < 32:
+            errors.append("production APP_SECRET must contain at least 32 bytes")
         if errors:
             raise RuntimeError("Invalid production configuration: " + "; ".join(errors))
 

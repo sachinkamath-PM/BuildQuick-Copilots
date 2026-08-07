@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from uuid import UUID
@@ -17,6 +18,7 @@ from app.domain.models import (
     Proposal,
     TycheWorkspace,
 )
+from app.services.migrations import LATEST_SCHEMA_VERSION, POSTGRES_MIGRATIONS, SQLITE_MIGRATIONS
 
 
 class Store(Protocol):
@@ -34,12 +36,16 @@ class Store(Protocol):
     def get_plutus_workspace(self, workspace_id: str, owner_user_id: str) -> PlutusWorkspace | None: ...
     def save_nous_workspace(self, workspace: NousWorkspace) -> None: ...
     def get_nous_workspace(self, workspace_id: str, owner_user_id: str) -> NousWorkspace | None: ...
+    def migrate(self) -> None: ...
+    def ping(self) -> None: ...
+    def register_guest_workspace(self, workspace_id: str, expires_at: datetime) -> None: ...
+    def delete_expired_guest_workspaces(self, now: datetime | None = None) -> int: ...
 
 
 class SQLiteStore:
     """Durable repository with JSON domain payloads and indexed ownership columns."""
 
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(self, database_path: str | Path, migrate_on_startup: bool = True) -> None:
         self.database_path = str(database_path)
         if self.database_path != ":memory:":
             Path(self.database_path).parent.mkdir(parents=True, exist_ok=True)
@@ -48,70 +54,38 @@ class SQLiteStore:
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._connection.execute("PRAGMA journal_mode = WAL")
-        self._migrate()
+        if migrate_on_startup:
+            self.migrate()
 
-    def _migrate(self) -> None:
+    def migrate(self) -> None:
         with self._connection:
-            self._connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS conversations (
-                    id TEXT PRIMARY KEY,
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    product TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS conversations_owner_idx
-                    ON conversations(workspace_id, owner_user_id, updated_at);
+            self._connection.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
+            applied = {row[0] for row in self._connection.execute("SELECT version FROM schema_migrations")}
+            for version, sql in SQLITE_MIGRATIONS:
+                if version not in applied:
+                    self._connection.executescript(sql)
+                    self._connection.execute("INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)", (version, datetime.now(timezone.utc).isoformat()))
 
-                CREATE TABLE IF NOT EXISTS context_snapshots (
-                    id TEXT PRIMARY KEY,
-                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                    workspace_id TEXT NOT NULL,
-                    created_by TEXT NOT NULL,
-                    payload TEXT NOT NULL
-                );
+    def ping(self) -> None:
+        row = self._connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+        if not row or row[0] != LATEST_SCHEMA_VERSION:
+            raise RuntimeError("Database migrations are not current")
 
-                CREATE TABLE IF NOT EXISTS proposals (
-                    id TEXT PRIMARY KEY,
-                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                    payload TEXT NOT NULL
-                );
+    def register_guest_workspace(self, workspace_id: str, expires_at: datetime) -> None:
+        with self._lock, self._connection:
+            self._connection.execute("INSERT INTO guest_workspaces(workspace_id, expires_at) VALUES (?, ?) ON CONFLICT(workspace_id) DO UPDATE SET expires_at=excluded.expires_at", (workspace_id, expires_at.astimezone(timezone.utc).isoformat()))
 
-                CREATE TABLE IF NOT EXISTS audit_events (
-                    id TEXT PRIMARY KEY,
-                    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                    workspace_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    payload TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS audit_conversation_idx
-                    ON audit_events(conversation_id, created_at);
-
-                CREATE TABLE IF NOT EXISTS tyche_workspaces (
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(workspace_id, owner_user_id)
-                );
-                CREATE TABLE IF NOT EXISTS plutus_workspaces (
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(workspace_id, owner_user_id)
-                );
-                CREATE TABLE IF NOT EXISTS nous_workspaces (
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY(workspace_id, owner_user_id)
-                );
-                """
-            )
+    def delete_expired_guest_workspaces(self, now: datetime | None = None) -> int:
+        cutoff = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat()
+        with self._lock, self._connection:
+            rows = self._connection.execute("SELECT workspace_id FROM guest_workspaces WHERE expires_at <= ?", (cutoff,)).fetchall()
+            workspace_ids = [row[0] for row in rows]
+            for workspace_id in workspace_ids:
+                self._connection.execute("DELETE FROM conversations WHERE workspace_id = ?", (workspace_id,))
+                for table in ("tyche_workspaces", "plutus_workspaces", "nous_workspaces"):
+                    self._connection.execute(f"DELETE FROM {table} WHERE workspace_id = ?", (workspace_id,))
+                self._connection.execute("DELETE FROM guest_workspaces WHERE workspace_id = ?", (workspace_id,))
+        return len(workspace_ids)
 
     def save_conversation(self, conversation: Conversation) -> None:
         with self._lock, self._connection:
@@ -291,7 +265,7 @@ class SQLiteStore:
 class PostgresStore:
     """PostgreSQL repository selected with a postgresql:// DATABASE_URL."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, migrate_on_startup: bool = True) -> None:
         try:
             import psycopg
         except ImportError as exc:
@@ -299,66 +273,41 @@ class PostgresStore:
         self._psycopg = psycopg
         self._connection = psycopg.connect(database_url)
         self._connection.autocommit = True
-        self._migrate()
+        if migrate_on_startup:
+            self.migrate()
 
-    def _migrate(self) -> None:
+    def migrate(self) -> None:
         with self._connection.cursor() as cursor:
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS conversations (
-                    id UUID PRIMARY KEY,
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    product TEXT NOT NULL,
-                    payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS conversations_owner_idx
-                    ON conversations(workspace_id, owner_user_id, updated_at);
-                CREATE TABLE IF NOT EXISTS context_snapshots (
-                    id UUID PRIMARY KEY,
-                    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                    workspace_id TEXT NOT NULL,
-                    created_by TEXT NOT NULL,
-                    payload JSONB NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS proposals (
-                    id UUID PRIMARY KEY,
-                    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                    payload JSONB NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS audit_events (
-                    id UUID PRIMARY KEY,
-                    conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-                    workspace_id TEXT NOT NULL,
-                    created_at TIMESTAMPTZ NOT NULL,
-                    payload JSONB NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS audit_conversation_idx
-                    ON audit_events(conversation_id, created_at);
-                CREATE TABLE IF NOT EXISTS tyche_workspaces (
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL,
-                    PRIMARY KEY(workspace_id, owner_user_id)
-                );
-                CREATE TABLE IF NOT EXISTS plutus_workspaces (
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL,
-                    PRIMARY KEY(workspace_id, owner_user_id)
-                );
-                CREATE TABLE IF NOT EXISTS nous_workspaces (
-                    workspace_id TEXT NOT NULL,
-                    owner_user_id TEXT NOT NULL,
-                    payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL,
-                    PRIMARY KEY(workspace_id, owner_user_id)
-                );
-                """
-            )
+            cursor.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL)")
+            cursor.execute("SELECT version FROM schema_migrations")
+            applied = {row[0] for row in cursor.fetchall()}
+            for version, sql in POSTGRES_MIGRATIONS:
+                if version not in applied:
+                    cursor.execute(sql)
+                    cursor.execute("INSERT INTO schema_migrations(version, applied_at) VALUES (%s, %s)", (version, datetime.now(timezone.utc)))
+
+    def ping(self) -> None:
+        with self._connection.cursor() as cursor:
+            cursor.execute("SELECT MAX(version) FROM schema_migrations")
+            row = cursor.fetchone()
+        if not row or row[0] != LATEST_SCHEMA_VERSION:
+            raise RuntimeError("Database migrations are not current")
+
+    def register_guest_workspace(self, workspace_id: str, expires_at: datetime) -> None:
+        with self._connection.cursor() as cursor:
+            cursor.execute("INSERT INTO guest_workspaces(workspace_id, expires_at) VALUES (%s, %s) ON CONFLICT(workspace_id) DO UPDATE SET expires_at=excluded.expires_at", (workspace_id, expires_at))
+
+    def delete_expired_guest_workspaces(self, now: datetime | None = None) -> int:
+        cutoff = now or datetime.now(timezone.utc)
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute("SELECT workspace_id FROM guest_workspaces WHERE expires_at <= %s FOR UPDATE", (cutoff,))
+            workspace_ids = [row[0] for row in cursor.fetchall()]
+            for workspace_id in workspace_ids:
+                cursor.execute("DELETE FROM conversations WHERE workspace_id = %s", (workspace_id,))
+                for table in ("tyche_workspaces", "plutus_workspaces", "nous_workspaces"):
+                    cursor.execute(f"DELETE FROM {table} WHERE workspace_id = %s", (workspace_id,))
+                cursor.execute("DELETE FROM guest_workspaces WHERE workspace_id = %s", (workspace_id,))
+        return len(workspace_ids)
 
     def save_conversation(self, conversation: Conversation) -> None:
         with self._connection.cursor() as cursor:
@@ -528,9 +477,9 @@ class PostgresStore:
 def build_store() -> Store:
     database_url = os.getenv("DATABASE_URL", "")
     if database_url.startswith(("postgresql://", "postgres://")):
-        return PostgresStore(database_url)
+        return PostgresStore(database_url, migrate_on_startup=os.getenv("MIGRATE_ON_STARTUP", "true").lower() in {"1", "true", "yes", "on"})
     if database_url.startswith("sqlite:///"):
-        return SQLiteStore(database_url.removeprefix("sqlite:///"))
+        return SQLiteStore(database_url.removeprefix("sqlite:///"), migrate_on_startup=os.getenv("MIGRATE_ON_STARTUP", "true").lower() in {"1", "true", "yes", "on"})
     if database_url:
         raise ValueError("DATABASE_URL must use postgresql:// or sqlite:///")
     return SQLiteStore(os.getenv("COPILOT_DB_PATH", "work/copilots.db"))

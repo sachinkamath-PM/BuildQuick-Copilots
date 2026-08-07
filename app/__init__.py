@@ -1,1 +1,1 @@
-"""Parallel copilots application."""
+"""BuildQuick Copilots application."""

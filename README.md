@@ -1,4 +1,4 @@
-# Parallel copilots — Tyche, Plutus and Nous MVPs
+# BuildQuick Copilots — Tyche, Plutus and Nous lab
 
 A working shared contextual-chat foundation for Tyche, Plutus, and Nous. It includes a responsive product workspace, collapsible assistant, streamed messages, explicit context, evidence links, reviewable proposals, source-version checks, durable storage, workspace isolation, and audit events.
 
@@ -10,7 +10,7 @@ Nous now turns an outcome entered in chat into an explicit multi-agent plan. TXT
 
 The shared runtime now fails closed on unsafe production configuration, supports per-product rollout flags, adds request IDs and safe provider metadata to audit records, applies API rate limits and browser security headers, and lets users delete individual conversations. Local defaults continue to run without external credentials.
 
-The repository includes a non-root Docker image, PostgreSQL Compose stack, GitHub Actions validation, explicit host filtering, and an isolated guest-demo mode for deployment behind HTTPS. See [the deployment guide](docs/DEPLOYMENT.md) before exposing the application publicly.
+The repository includes a non-root Docker image, PostgreSQL Compose stack, GitHub Actions validation, explicit host filtering, automatic guest-data expiry, and an isolated guest-demo mode for deployment behind HTTPS. See [the deployment guide](docs/DEPLOYMENT.md) before exposing the application publicly. This lab complements the product-owned copilots; it is not the production runtime for Tyche, Plutus, or Nous.
 
 The default assistant provider is deterministic and requires no external API. A production OpenAI Responses API adapter is included behind configuration, validates strict structured output, filters citations to the authorised evidence catalog, hashes end-user identifiers, and never applies model-proposed changes directly. Local development uses a signed short-lived demo identity; production disables the demo-token route and can use OAuth token introspection.
 
@@ -37,11 +37,21 @@ For Nous, import up to five TXT, CSV, or JSON sources at once, select the exact 
 
 Runtime data is stored in `work/copilots.db`. Copy `.env.example` into your secret-management system and configure environment variables there. In production, use PostgreSQL, `AUTH_MODE=introspection`, and `APP_ENV=production` to disable the demo token endpoint.
 
+Operational commands:
+
+```bash
+python3 -m app.maintenance migrate
+python3 -m app.maintenance readiness
+python3 -m app.maintenance cleanup-guests
+```
+
 ## Test
 
 ```bash
 python3 -m pytest
 ```
+
+Production container dependencies are pinned and hash-verified in `requirements.lock`. Regenerate it deliberately after reviewing dependency updates with `pip-compile --generate-hashes --strip-extras --output-file requirements.lock pyproject.toml`.
 
 ## Current boundaries
 
