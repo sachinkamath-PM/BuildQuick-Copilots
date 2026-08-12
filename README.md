@@ -2,6 +2,8 @@
 
 A working shared contextual-chat foundation for Tyche, Plutus, and Nous. It includes a responsive product workspace, collapsible assistant, streamed messages, explicit context, evidence links, reviewable proposals, source-version checks, durable storage, workspace isolation, and audit events.
 
+The current release is `v0.10.1`. Its production image is published as `ghcr.io/sachinkamath-pm/buildquick-copilots:v0.10.1`.
+
 Tyche now includes durable résumé and job-description records, safe DOCX/PDF/TXT imports, structure-preserving résumé blocks, a normalized DOCX export, a deterministic ATS analysis, a visible evidence inventory, server-grounded chat context, supported-claim links on rewrite proposals, conflict-safe Apply, and bounded Undo. Imported claims become explicit evidence items; accepted rewrites update both the editable claim and its exported document block. The ATS score is an explainable product heuristic—not a prediction of any employer's proprietary screening system.
 
 Plutus now includes durable family accounts, transactions, policies and goals; atomic CSV onboarding for real account and expense records; automatically selected quarter comparisons; subscription and unusual-transaction detection; nominee and insurance-data gap classification; evidence-linked explanations; and deterministic goal scenarios. Invalid imports leave the prior workspace untouched. Goal scenarios remain unapplied proposals until the user explicitly selects Apply. Plutus does not execute payments or investments.
@@ -14,13 +16,27 @@ The repository includes a non-root Docker image, PostgreSQL Compose stack, GitHu
 
 The default assistant provider is deterministic and requires no external API. A production OpenAI Responses API adapter is included behind configuration, validates strict structured output, filters citations to the authorised evidence catalog, hashes end-user identifiers, and never applies model-proposed changes directly. Local development uses a signed short-lived demo identity; production disables the demo-token route and can use OAuth token introspection.
 
-## Run
+## Local setup
+
+Python 3.13 is used by CI and the production container. From a fresh checkout:
 
 ```bash
-python3 -m uvicorn app.main:app --reload
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install --require-hashes -r requirements.lock
+mkdir -p work
+```
+
+Run the application:
+
+```bash
+python -m uvicorn app.main:app --reload
 ```
 
 Open <http://127.0.0.1:8000>. In Tyche, submit “Make this more senior” to exercise the full context → streaming response → evidence → diff → apply flow.
+
+If port 8000 is occupied, add `--port 8001` and open <http://127.0.0.1:8001> instead.
 
 To exercise the complete Tyche flow:
 
@@ -48,10 +64,18 @@ python3 -m app.maintenance cleanup-guests
 ## Test
 
 ```bash
-python3 -m pytest
+python -m pip install 'pytest>=9,<10'
+python -m pytest
 ```
 
-Production container dependencies are pinned and hash-verified in `requirements.lock`. Regenerate it deliberately after reviewing dependency updates with `pip-compile --generate-hashes --strip-extras --output-file requirements.lock pyproject.toml`.
+Production container dependencies are pinned and hash-verified in `requirements.lock`. Regenerate it deliberately with Python 3.13 after reviewing dependency updates:
+
+```bash
+python -m pip install pip-tools
+python -m piptools compile --generate-hashes --strip-extras --output-file requirements.lock pyproject.toml
+```
+
+For the PostgreSQL guest-demo stack, immutable GHCR releases, TLS, backups, and rollback, follow the [deployment guide](docs/DEPLOYMENT.md). Review the [security policy](SECURITY.md) before exposing the application publicly.
 
 ## Current boundaries
 
